@@ -1,0 +1,172 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(readr)
+data <- read_csv("C:/Users/AORAN/Desktop/UNIVERSITY/MSBA/data visualization/country_vaccinations.csv", 
+    col_types = cols(date = col_date(format = "%Y-%m-%d")))
+```
+
+```{r}
+library(tidyverse)
+library(maps)
+library(rnaturalearth)
+library(rgeos)
+library(rnaturalearth)
+library(countrycode)
+library(ggpubr)
+```
+
+```{r}
+total_vaccinated <- data %>%
+    group_by(country) %>%
+    filter(!is.na(total_vaccinations)) %>%
+    summarise(
+        total_vaccinations = max(total_vaccinations),
+        total_vaccinations_per_hundred = max(total_vaccinations_per_hundred),
+        vaccines = first(vaccines),
+    ) %>%
+    filter(total_vaccinations_per_hundred >= 0 & total_vaccinations_per_hundred <= 100)
+```
+
+```{r}
+fully_vaccinated <- data %>%
+    group_by(country) %>%
+    filter(!is.na(people_fully_vaccinated)) %>%
+    summarise(
+        total_vaccinations_per_hundred = max(total_vaccinations_per_hundred),
+        people_fully_vaccinated = max(people_fully_vaccinated),
+        people_fully_vaccinated_per_hundred = max(people_fully_vaccinated_per_hundred),
+    ) %>%
+    filter(total_vaccinations_per_hundred >= 0 & total_vaccinations_per_hundred <= 100) %>%
+    select(country, people_fully_vaccinated, people_fully_vaccinated_per_hundred)
+```
+
+```{r}
+plot1 <- ne_countries(scale = 110, returnclass = "sf") %>%
+    select(name,formal_en) %>%
+    right_join(total_vaccinated,by=c("name"="country")) %>%
+    ggplot() +
+    geom_sf(aes(fill = total_vaccinated$total_vaccinations_per_hundred),position = "identity") +
+    scale_fill_distiller(palette = "Spectral") +
+    theme(legend.position="top", panel.background = element_blank(),
+          plot.title = element_text(face = "bold", size = 12, color = "#0099f9"),)+ 
+    labs(fill = "vaccination rate%", title = "Vaccination rate map")
+```
+
+
+```{r}
+total_vaccinated_continet <- as.data.frame(total_vaccinated)
+```
+
+```{r}
+total_vaccinated_continet$continent <- countrycode(sourcevar = total_vaccinated_continet[,"country"],
+                            origin = "country.name",
+                            destination = "continent")
+```
+```{r}
+total_vaccinated_continet %>% 
+    filter(is.na(continent))
+```
+
+```{r}
+total_vaccinated_continet2 <- total_vaccinated_continet %>% 
+    mutate(continent = replace_na(continent, "Europe")) #England Northern Ireland Scotland Wales
+```
+
+```{r}
+data2 <- as.data.frame(data)
+```
+
+
+```{r}
+data2$continent <- countrycode(sourcevar = data2[,"country"],
+                            origin = "country.name",
+                            destination = "continent")
+    
+```
+
+
+```{r}
+data3 <- data2 %>% 
+    mutate(continent = replace_na(continent, "Europe"))
+```
+
+```{r}
+data4 <- data3 %>% 
+    filter(!is.na(daily_vaccinations)) %>% 
+    group_by(date,continent) %>% 
+    summarise(continent_daily = sum(daily_vaccinations))
+    
+```
+
+```{r}
+options(scipen=10000)
+plot2 <- ggplot(data4, aes(x = date, y = continent_daily)) + 
+  geom_line(aes(color = continent), 
+            alpha = 0.5, position = position_dodge(0.8), size = 1.2) +
+    scale_x_date(date_labels = "%Y/%b") + 
+    labs(title = "Daily vaccination number by continent", y = "Daily count", x = "Date", subtitle = "Data from 2020-12 to 2021-3",)+
+     theme_bw() + 
+  theme(
+    plot.title = element_text(face = "bold", size = 12, color = "#0099f9"),
+    legend.background = element_rect(fill = "white", size = 4, colour = "white"),
+    legend.justification = c(0, 1),
+    legend.position = c(0, 1),
+    axis.ticks = element_line(colour = "grey70", size = 0.2),
+    panel.grid.major = element_line(colour = "grey70", size = 0.2),
+    panel.grid.minor = element_blank(),
+    axis.title.y = element_text(color="black", size=10,hjust = 1, angle = 45)) +
+    scale_colour_brewer(type = "seq", palette = "Set1")
+    
+```
+
+
+```{r}
+plot3 <- total_vaccinated_continet2 %>%
+    group_by(continent) %>% 
+    summarise(total_vaccinations = sum(total_vaccinations)) %>% 
+    ggplot(aes(x = continent, y = total_vaccinations)) +
+    geom_bar(aes(fill = continent), position = "identity", stat = "identity", show.legend = FALSE, alpha = 0.5) +
+    labs(x = "Continent", y = "Total Vaccinations") +
+    theme_classic() + 
+    scale_colour_brewer(type = "seq", palette = "Set1") + 
+    labs(
+    title = "Total vaccinations by continent",
+    subtitle = "Data from 2020-12 to 2021-3",
+  ) + 
+    geom_text(aes(label = total_vaccinations), vjust = -0.5, size = 3) + 
+    theme(
+    plot.title = element_text(color = "#0099f9", size = 12, face = "bold")
+  )
+``` 
+
+
+
+```{r}
+plot4 <- total_vaccinated_continet2%>%
+    group_by(continent) %>% 
+    ggplot(aes(x = continent, y = total_vaccinations,fill=continent)) +
+  geom_boxplot(alpha = 0.7, show.legend = FALSE)+
+  scale_y_log10()+
+  labs(
+    title = "Total vaccinations boxplot by continent",
+    subtitle = "Data from 2020-12 to 2021-3",
+  ) + 
+  labs(y = "Total vaccinations (log 10 transformation)", x = "Continent")+
+  theme_bw() + 
+    theme(plot.title = element_text(size = 12, family = "Tahoma", face =
+                                    "bold", color = "#0099f9"),
+        text = element_text(size = 11, family = "Tahoma"),
+        axis.text.x=element_text(size = 11),
+        legend.position = "right") +
+  scale_fill_brewer(palette = "Set1") +
+  labs(fill = "")
+```  
+
+```{r}
+ggarrange(plot1, plot2, plot3,plot4, 
+          ncol = 2, nrow = 2)
+```
+
